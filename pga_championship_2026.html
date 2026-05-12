@@ -236,8 +236,13 @@ const db = getDatabase(fbApp);
 
 // ── Constants ────────────────────────────────────────────────────
 const TEAMS = ['HC','JAD','CC','RD','DC','JDS','SC','KS'];
-const SNAKE = ['HC','CC','DC','KS','SC','JAD','JDS','RD','RD','JDS','JAD','SC','KS','DC','CC','HC'];
 const RD_LABELS = {1:'Round 1 · Thu May 14',2:'Round 2 · Fri May 15',3:'Round 3 · Sat May 16',4:'Round 4 · Sun May 17'};
+
+// Generates snake draft picks from a draft order array
+// e.g. ['HC','CC','DC',...] → picks 1-8 forward, 9-16 reverse
+function buildSnake(order){
+  return [...order, ...[...order].reverse()].map((team,i)=>({pick:i+1,team,player:'',keep:false}));
+}
 
 // PGA Championship — ESPN scoreboard API + PGA.com fallback
 const MASTERS_API = 'https://www.pgachampionship.com/api/scores';
@@ -293,9 +298,18 @@ const OFFICIAL_TEE_TIMES = {
 };
 
 // ── State ────────────────────────────────────────────────────────
-function defaultPool(){const p={};for(let r=1;r<=4;r++)p[r]=SNAKE.map((team,i)=>({pick:i+1,team,player:'',keep:false}));return p;}
+// draftOrder[round] = array of 8 team IDs in pick order (worst-to-first for R2-4)
+// draftLocked = true once Round 1 shuffle has been done and saved
+let draftOrder = {1:[...TEAMS],2:[...TEAMS],3:[...TEAMS],4:[...TEAMS]};
+let draftLocked = false; // locks after first shuffle
+
+function defaultPool(){
+  const p={};
+  for(let r=1;r<=4;r++) p[r]=buildSnake(draftOrder[r]);
+  return p;
+}
 let pool = defaultPool();
-let espnData = {};      // { playerName: { score, thru, teeTime, status, roundScore } }
+let espnData = {};
 let lastFetch = null;
 let currentRound = 1;
 let autoRefreshTimer = null;
@@ -310,19 +324,57 @@ function setSyncState(state, msg){
 async function fbSave(){
   setSyncState('syncing');
   try{
-    const d={};for(let r=1;r<=4;r++)d[r]=pool[r].map(p=>({player:p.player||'',keep:p.keep||false}));
-    await set(ref(db,'pool'),d);setSyncState('ok');
+    const d={};
+    for(let r=1;r<=4;r++) d[r]=pool[r].map(p=>({player:p.player||'',keep:p.keep||false}));
+    await set(ref(db,'pool'),d);
+    await set(ref(db,'draftOrder'),draftOrder);
+    await set(ref(db,'draftLocked'),draftLocked);
+    setSyncState('ok');
   }catch(e){setSyncState('err','Save failed');}
 }
+
 function fbListen(){
+  // Listen for pool picks
   onValue(ref(db,'pool'),(snap)=>{
-    const d=snap.val();if(!d){setSyncState('ok','Connected — no picks yet');return;}
-    for(let r=1;r<=4;r++){if(d[r])d[r].forEach((p,i)=>{if(pool[r][i]){pool[r][i].player=p.player||'';pool[r][i].keep=p.keep||false;}});}
-    for(let r=1;r<=4;r++)renderRound(r);
-    if(currentRound==='setup')renderSetup();
+    const d=snap.val();
+    if(!d){setSyncState('ok','Connected — no picks yet');return;}
+    for(let r=1;r<=4;r++){
+      if(d[r]) d[r].forEach((p,i)=>{
+        if(pool[r][i]){pool[r][i].player=p.player||'';pool[r][i].keep=p.keep||false;}
+      });
+    }
+    for(let r=1;r<=4;r++) renderRound(r);
+    if(currentRound==='setup') renderSetup();
     renderLiveBoard();
     setSyncState('ok');
   },(e)=>setSyncState('err','Lost connection'));
+
+  // Listen for draft order changes
+  onValue(ref(db,'draftOrder'),(snap)=>{
+    const d=snap.val();
+    if(!d) return;
+    for(let r=1;r<=4;r++){
+      if(d[r]) draftOrder[r]=d[r];
+    }
+    // Rebuild pool pick slots to match new draft order (preserve player names)
+    for(let r=1;r<=4;r++){
+      const newSlots=buildSnake(draftOrder[r]);
+      // Preserve existing player assignments by pick number
+      newSlots.forEach((slot,i)=>{
+        if(pool[r][i]){slot.player=pool[r][i].player||'';slot.keep=pool[r][i].keep||false;}
+      });
+      pool[r]=newSlots;
+    }
+    if(currentRound==='setup') renderSetup();
+    for(let r=1;r<=4;r++) renderRound(r);
+  });
+
+  // Listen for draft lock state
+  onValue(ref(db,'draftLocked'),(snap)=>{
+    const val=snap.val();
+    if(val!==null) draftLocked=!!val;
+    if(currentRound==='setup') renderSetup();
+  });
 }
 
 // ── Score Fetch ──────────────────────────────────────────────────
@@ -664,11 +716,106 @@ function renderLiveBoard(){
   updateFetchTime();
 }
 
+// ── Draft Order Helpers ──────────────────────────────────────────
+function shuffleDraftOrder(){
+  if(draftLocked){alert('Draft order is locked — it can only be shuffled once per tournament.');return;}
+  const shuffled=[...TEAMS];
+  for(let i=shuffled.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
+  }
+  draftOrder[1]=shuffled;
+  // Rebuild Round 1 picks with new order (preserve player names if any)
+  const oldPlayers=pool[1].map(p=>p.player);
+  pool[1]=buildSnake(draftOrder[1]);
+  pool[1].forEach((p,i)=>{if(oldPlayers[i])p.player=oldPlayers[i];});
+  renderSetup();
+}
+
+function lockDraftOrder(){
+  if(draftLocked){alert('Already locked!');return;}
+  if(!confirm('Lock the Round 1 draft order? This cannot be undone for this tournament.')) return;
+  draftLocked=true;
+  fbSave();
+  renderSetup();
+  alert('Draft order locked and synced to all users! ✅');
+}
+
+// Auto-set Rounds 2-4 draft order based on previous round scores (worst-to-first)
+function autoSetDraftOrder(round){
+  if(round<2||round>4) return;
+  const prevRound=round-1;
+  const teamTotals=TEAMS.map(id=>{
+    const t=teamTotal(prevRound,id);
+    return {id,total:t};
+  });
+  // Sort worst to first (highest score = worst = picks first)
+  teamTotals.sort((a,b)=>{
+    if(a.total===null&&b.total===null) return 0;
+    if(a.total===null) return 1; // null = didn't score, pick last
+    if(b.total===null) return -1;
+    return b.total-a.total; // highest score picks first
+  });
+  draftOrder[round]=teamTotals.map(t=>t.id);
+  // Rebuild pool picks with new order
+  const oldPlayers=pool[round].map(p=>({team:p.team,player:p.player,keep:p.keep}));
+  pool[round]=buildSnake(draftOrder[round]);
+  // Re-match players to their team slots
+  pool[round].forEach(slot=>{
+    const old=oldPlayers.find(o=>o.team===slot.team&&o.player);
+    if(old&&!slot.player){slot.player=old.player||'';slot.keep=old.keep||false;}
+  });
+}
+
 // ── Setup ────────────────────────────────────────────────────────
 function renderSetup(){
-  let html='';
+  // Draft order section for Round 1
+  const r1Order=draftOrder[1];
+  const orderHTML=r1Order.map((team,i)=>`
+    <div style="display:flex;align-items:center;gap:.6rem;padding:.4rem .75rem;background:rgba(200,210,230,.05);border:1px solid var(--border);margin-bottom:.3rem;">
+      <span style="font-size:.65rem;color:rgba(200,210,230,.35);width:1.5rem;">${i+1}</span>
+      <span class="setup-tag">${team}</span>
+      <span style="font-size:.75rem;flex:1;">${team}</span>
+      <span style="font-size:.6rem;color:rgba(200,210,230,.35);">picks ${i+1} & ${16-i}</span>
+    </div>`).join('');
+
+  const shuffleBtnHTML=draftLocked
+    ? `<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.3);padding:.75rem 1rem;font-size:.7rem;color:var(--lime);border-radius:2px;">✅ Draft order locked and synced to all users</div>`
+    : `<div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.75rem;">
+        <button class="save-btn" style="flex:1;" onclick="window._shuffleDraft()">🎲 Shuffle Draft Order</button>
+        <button class="save-btn" style="flex:1;background:var(--lime);color:#060e1c;" onclick="window._lockDraft()">🔒 Lock & Sync to Everyone</button>
+       </div>
+       <div style="font-size:.62rem;color:rgba(200,210,230,.4);margin-top:.5rem;">Shuffle as many times as you like, then Lock when ready. Once locked it cannot be changed.</div>`;
+
+  let html=`
+    <div class="setup-box">
+      <div class="sec">Round 1 Draft Order — Hat Draw</div>
+      <div class="setup-note">Click <strong>Shuffle</strong> to randomly set the Round 1 draft order (simulates pulling names from a hat). The order snakes — picks 1-8 go forward, picks 9-16 reverse. Once you're happy, click <strong>Lock</strong> to sync to all users.</div>
+      ${orderHTML}
+      ${shuffleBtnHTML}
+    </div>`;
+
+  // Picks for each round
   for(let r=1;r<=4;r++){
     const rdLabel=['','Round 1 — Thursday','Round 2 — Friday','Round 3 — Saturday','Round 4 — Sunday'][r];
+
+    // For R2-4 show auto-order note
+    let orderNote='';
+    if(r>1){
+      const prevScores=TEAMS.map(id=>({id,total:teamTotal(r-1,id)})).sort((a,b)=>{
+        if(a.total===null&&b.total===null)return 0;
+        if(a.total===null)return 1;
+        if(b.total===null)return -1;
+        return b.total-a.total;
+      });
+      const hasScores=prevScores.some(t=>t.total!==null);
+      if(hasScores){
+        orderNote=`<div style="font-size:.62rem;color:rgba(200,210,230,.5);margin-bottom:.5rem;">📊 Draft order auto-set from Round ${r-1} scores (worst to first): ${draftOrder[r].join(' → ')}</div>`;
+      } else {
+        orderNote=`<div style="font-size:.62rem;color:rgba(200,210,230,.4);margin-bottom:.5rem;">Draft order will auto-set from Round ${r-1} scores once available.</div>`;
+      }
+    }
+
     const rows=pool[r].map((p,i)=>`
       <div class="pick-row">
         <span class="setup-lbl">${p.pick}</span>
@@ -677,16 +824,20 @@ function renderSetup(){
         ${r<4?`<label class="keep-wrap"><input type="checkbox" class="keep-cb" ${p.keep?'checked':''} onchange="window._toggleKeep(${r},${i},this.checked)"/>keep</label>`:'<span></span>'}
         ${r<4?`<button class="copy-btn" onclick="window._copyToNext(${r},${i})">→ Rd${r+1}</button>`:'<span></span>'}
       </div>`).join('');
+
     html+=`<div class="setup-box">
       <div class="sec">${rdLabel}</div>
-      <div class="setup-note">Search or type a player name. <strong>Keep</strong> = carry to next round. <strong>→ Rd${r<4?r+1:'—'}</strong> = copy this pick now.</div>
+      ${orderNote}
+      <div class="setup-note">Search or type a player name. <strong>Keep</strong> = carry to next round.</div>
       <div class="setup-grid">${rows}</div>
     </div>`;
   }
+
   html+=`<div class="action-row">
-    <button class="save-btn" onclick="window._doSave()">💾 Save & Sync to Everyone</button>
+    <button class="save-btn" onclick="window._doSave()">💾 Save Picks & Sync to Everyone</button>
     <button class="sec-btn" onclick="window._applyKeeps()">↻ Apply All Keeps</button>
   </div>`;
+
   document.getElementById('panel-setup').innerHTML=html;
   for(let r=1;r<=4;r++) pool[r].forEach((p,i)=>buildAC(`ac-r${r}-i${i}`,p.player,(val)=>{pool[r][i].player=val;}));
 }
@@ -709,9 +860,13 @@ function buildAC(id,val,onChange){
 
 // ── Global actions ───────────────────────────────────────────────
 window._fetchESPN = fetchESPN;
+window._shuffleDraft = shuffleDraftOrder;
+window._lockDraft = lockDraftOrder;
 
 window._doSave = async function(){
-  // Apply keeps before saving so carryovers are included
+  // Auto-set R2-4 draft orders based on current scores
+  for(let r=2;r<=4;r++) autoSetDraftOrder(r);
+  // Apply keeps before saving
   for(let r=1;r<=3;r++){
     pool[r].forEach((p,i)=>{
       if(p.keep&&p.player.trim()&&!pool[r+1][i].player.trim()){
@@ -720,8 +875,8 @@ window._doSave = async function(){
     });
   }
   await fbSave();
-  for(let r=1;r<=4;r++)renderRound(r);
-  showRound(1);
+  for(let r=1;r<=4;r++) renderRound(r);
+  showRound(getCurrentRound());
   fetchESPN();
 };
 
