@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026 PGA Championship Pool</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0a1628;        /* PGA deep navy */
+  --navy-mid:#122040;    /* mid navy for cards */
+  --navy-light:#1a3060;  /* lighter navy for hover */
+  --silver:#c8cdd6;      /* PGA silver */
+  --accent:#e8edf5;      /* light silver accent */
+  --cream:#f0f4f8;       /* off-white text */
+  --dark:#060e1c;        /* deepest navy background */
+  --border:rgba(200,205,214,0.2); /* silver border */
+  --red:#f87171;
+  --lime:#4ade80;
+  --blue-bright:#4a9eff;  /* bright blue highlight */
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#060e1c;color:var(--cream);font-family:'DM Mono',monospace;min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(26,48,96,.4) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(10,22,40,.6) 0%, transparent 60%),
+    repeating-linear-gradient(0deg,transparent,transparent 48px,rgba(255,255,255,.008) 48px,rgba(255,255,255,.008) 49px),
+    repeating-linear-gradient(90deg,transparent,transparent 48px,rgba(255,255,255,.008) 48px,rgba(255,255,255,.008) 49px);
+  pointer-events:none;z-index:0;}
+.wrap{max-width:980px;margin:0 auto;padding:1.5rem 1rem 5rem;position:relative;z-index:1;}
+
+/* HEADER */
+header{text-align:center;padding:2.5rem 0 2rem;border-bottom:1px solid var(--border);margin-bottom:2rem;position:relative;}
+header::after{content:'';position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);width:60px;height:2px;background:var(--silver);}
+.eyebrow{font-size:.6rem;letter-spacing:.4em;color:var(--silver);text-transform:uppercase;margin-bottom:.6rem;}
+h1{font-family:'Playfair Display',serif;font-size:clamp(2.2rem,6vw,4rem);font-weight:900;line-height:.95;letter-spacing:-.02em;}
+h1 em{color:var(--blue-bright);font-style:normal;}
+.sub{margin-top:.8rem;font-size:.65rem;letter-spacing:.2em;color:rgba(200,210,230,.45);text-transform:uppercase;}
+.sync-bar{display:flex;align-items:center;justify-content:center;gap:.6rem;margin-top:.9rem;font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--lime);transition:background .3s;}
+.sync-dot.syncing{background:var(--silver);animation:blink 1s infinite;}
+.sync-dot.err{background:var(--red);}
+.sync-dot.off{background:rgba(200,210,230,.2);}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* TABS */
+.round-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:1.75rem;overflow-x:auto;}
+.rtab{background:transparent;border:none;border-bottom:2px solid transparent;color:rgba(200,210,230,.4);padding:.65rem 1.2rem;font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;cursor:pointer;white-space:nowrap;margin-bottom:-1px;transition:all .18s;}
+.rtab:hover{color:var(--cream);}
+.rtab.active{color:var(--silver);border-bottom-color:var(--silver);}
+.rtab .badge{display:inline-block;background:rgba(200,205,214,.18);padding:.05rem .3rem;font-size:.55rem;margin-left:.3rem;}
+.round-panel{display:none;}.round-panel.active{display:block;}
+
+/* STATUS ROW */
+.status-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;background:rgba(18,32,64,.2);border:1px solid var(--border);padding:.75rem 1.1rem;margin-bottom:1.5rem;}
+.status-pill{display:flex;align-items:center;gap:.45rem;font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;color:var(--silver);}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--silver);}
+.dot.live{animation:blink 1.6s infinite;}
+.dot.off{background:rgba(200,205,214,.3);}
+.updated{font-size:.58rem;color:rgba(200,210,230,.4);}
+.btn-row{display:flex;gap:.5rem;flex-wrap:wrap;}
+.refresh-btn{background:transparent;border:1px solid var(--border);color:var(--silver);padding:.35rem 1rem;font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;transition:all .18s;}
+.refresh-btn:hover{background:rgba(200,205,214,.1);border-color:var(--silver);}
+.refresh-btn:disabled{opacity:.35;cursor:not-allowed;}
+
+/* WINNER BANNERS */
+.winners-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1.75rem;}
+@media(max-width:520px){.winners-row{grid-template-columns:1fr;}}
+.winner-card{background:rgba(200,205,214,.07);border:1px solid rgba(200,205,214,.38);padding:1rem 1.2rem;position:relative;overflow:hidden;}
+.winner-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--silver),var(--blue-bright),var(--silver));}
+.winner-label{font-size:.55rem;letter-spacing:.3em;text-transform:uppercase;color:rgba(200,205,214,.7);margin-bottom:.4rem;}
+.winner-name{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;color:var(--silver);line-height:1.3;}
+.winner-detail{font-size:.65rem;color:rgba(200,210,230,.5);margin-top:.25rem;line-height:1.5;}
+.winner-tbd{font-family:'Playfair Display',serif;font-size:1rem;color:rgba(200,210,230,.22);}
+
+/* SECTION */
+.sec{font-size:.55rem;letter-spacing:.38em;color:var(--silver);text-transform:uppercase;margin-bottom:.85rem;display:flex;align-items:center;gap:.8rem;}
+.sec::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* TEAM LEADERBOARD */
+.team-lb{margin-bottom:2.25rem;}
+.team-row{display:grid;grid-template-columns:2.2rem 3rem 1fr auto;align-items:center;gap:.85rem;background:rgba(18,32,64,.2);border:1px solid var(--border);padding:.85rem 1.1rem;margin-bottom:.4rem;position:relative;overflow:hidden;transition:background .15s;}
+.team-row::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--border);transition:background .15s;}
+.team-row:hover{background:rgba(18,32,64,.35);}
+.team-row:hover::before{background:var(--silver);}
+.team-row.silver-row{background:rgba(200,205,214,.1);border-color:rgba(200,205,214,.45);}
+.team-row.silver-row::before{background:var(--silver);}
+.rank-num{font-family:'Playfair Display',serif;font-size:1.3rem;font-weight:700;color:rgba(200,210,230,.25);text-align:center;}
+.silver-row .rank-num{color:var(--silver);}
+.team-tag{display:inline-block;background:rgba(200,205,214,.1);border:1px solid var(--border);padding:.1rem .45rem;font-size:.65rem;color:var(--silver);letter-spacing:.08em;}
+.team-info{min-width:0;}
+.team-id{font-size:.95rem;font-weight:500;letter-spacing:.06em;}
+.team-sub{font-size:.58rem;color:rgba(200,210,230,.35);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.team-total{font-family:'Playfair Display',serif;font-size:1.65rem;font-weight:700;text-align:right;white-space:nowrap;}
+
+/* PICKS TABLE */
+.picks-wrap{margin-bottom:2.5rem;overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{font-size:.52rem;letter-spacing:.28em;text-transform:uppercase;color:var(--silver);font-weight:400;text-align:left;padding:.55rem .75rem;border-bottom:1px solid var(--border);}
+th.r{text-align:right;}
+td{padding:.5rem .75rem;font-size:.78rem;border-bottom:1px solid rgba(200,205,214,.07);color:var(--cream);vertical-align:middle;}
+tr:hover td{background:rgba(18,32,64,.18);}
+.pnum{color:rgba(200,210,230,.3);font-size:.65rem;}
+.pname{font-weight:500;}
+.pname.empty{color:rgba(200,210,230,.25);font-style:italic;font-size:.7rem;}
+.sc-cell{text-align:right;}
+.chip{display:inline-block;padding:.12rem .55rem;border-radius:2px;font-family:'Playfair Display',serif;font-size:.95rem;font-weight:700;min-width:3rem;text-align:center;}
+.chip-neg{background:rgba(74,222,128,.12);color:var(--lime);}
+.chip-pos{background:rgba(248,113,113,.12);color:var(--red);}
+.chip-even{background:rgba(200,210,230,.07);color:var(--cream);}
+.chip-nd{color:rgba(200,210,230,.25);font-family:'DM Mono',monospace;font-size:.7rem;font-weight:400;}
+.win-flag{display:inline-block;background:rgba(200,205,214,.18);border:1px solid rgba(200,205,214,.4);color:var(--silver);font-size:.5rem;letter-spacing:.08em;text-transform:uppercase;padding:.1rem .35rem;margin-left:.35rem;vertical-align:middle;}
+
+/* TEE TIME / HOLE INFO */
+.player-meta{font-size:.58rem;color:rgba(245,240,232,.38);margin-top:.15rem;display:flex;gap:.6rem;flex-wrap:wrap;}
+.meta-pill{display:inline-flex;align-items:center;gap:.25rem;}
+.meta-live{color:var(--blue-bright);}
+.meta-upcoming{color:rgba(200,210,230,.7);}
+.meta-complete{color:rgba(200,210,230,.3);}
+
+/* SETUP */
+.setup-box{background:rgba(18,32,64,.15);border:1px solid var(--border);padding:1.25rem;margin-bottom:1.5rem;}
+.setup-note{font-size:.65rem;color:rgba(200,210,230,.5);line-height:1.6;margin-bottom:.75rem;}
+.setup-grid{display:grid;gap:.5rem;}
+.pick-row{display:grid;grid-template-columns:1.8rem 3rem 1fr auto auto;gap:.55rem;align-items:center;}
+.setup-lbl{font-size:.62rem;color:rgba(200,210,230,.35);}
+.setup-tag{font-size:.72rem;color:var(--silver);font-weight:500;}
+.ac-wrap{position:relative;width:100%;}
+input.pi{background:rgba(200,210,230,.04);border:1px solid var(--border);color:var(--cream);padding:.38rem .7rem;font-family:'DM Mono',monospace;font-size:.78rem;width:100%;outline:none;transition:border-color .18s;}
+input.pi:focus{border-color:var(--silver);}
+input.pi::placeholder{color:rgba(200,210,230,.18);}
+.ac-dropdown{position:absolute;top:100%;left:0;right:0;z-index:999;background:#0a1628;border:1px solid var(--blue-bright);border-top:none;max-height:180px;overflow-y:auto;display:none;}
+.ac-dropdown.open{display:block;}
+.ac-item{padding:.45rem .75rem;font-size:.75rem;cursor:pointer;border-bottom:1px solid rgba(200,205,214,.08);}
+.ac-item:hover{background:rgba(200,205,214,.12);color:var(--silver);}
+.ac-item.no-match{color:rgba(200,210,230,.3);cursor:default;}
+.keep-wrap{display:flex;align-items:center;gap:.35rem;font-size:.58rem;color:rgba(200,210,230,.45);white-space:nowrap;}
+input[type=checkbox].keep-cb{accent-color:var(--silver);width:13px;height:13px;cursor:pointer;}
+.copy-btn{background:transparent;border:1px solid var(--border);color:rgba(200,210,230,.5);padding:.38rem .55rem;font-family:'DM Mono',monospace;font-size:.58rem;cursor:pointer;white-space:nowrap;transition:all .18s;}
+.copy-btn:hover{border-color:var(--silver);color:var(--silver);}
+.action-row{display:flex;gap:.6rem;margin-top:.85rem;flex-wrap:wrap;}
+.save-btn{background:var(--blue-bright);color:#060e1c;border:none;padding:.6rem 2rem;font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:background .18s;flex:1;}
+.save-btn:hover{background:var(--silver);}
+.sec-btn{background:rgba(200,205,214,.12);color:var(--silver);border:1px solid var(--border);padding:.6rem 1.5rem;font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:all .18s;}
+.sec-btn:hover{background:rgba(200,205,214,.2);}
+
+/* LOADING */
+#loading-screen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;}
+.spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--silver);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading-screen p{font-size:.65rem;letter-spacing:.25em;text-transform:uppercase;color:rgba(200,210,230,.4);}
+
+/* ESPN LIVE LEADERBOARD */
+.espn-board{margin-bottom:2rem;}
+.espn-row{display:grid;grid-template-columns:2rem 1fr 3rem 3rem 3rem 4rem;align-items:center;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid rgba(200,205,214,.07);font-size:.75rem;}
+.espn-row:hover{background:rgba(18,32,64,.18);}
+.espn-row.espn-head{font-size:.52rem;letter-spacing:.2em;text-transform:uppercase;color:var(--silver);border-bottom:1px solid var(--border);padding:.5rem .75rem;}
+.espn-pos{color:rgba(200,210,230,.3);font-size:.65rem;}
+.espn-name{font-weight:500;}
+.espn-name.in-pool{color:var(--silver);}
+.espn-hole{color:rgba(200,210,230,.4);font-size:.68rem;text-align:center;}
+.espn-tee{color:rgba(200,210,230,.4);font-size:.65rem;text-align:center;}
+.espn-score{text-align:right;font-family:'Playfair Display',serif;font-size:1rem;font-weight:700;}
+.espn-status{font-size:.6rem;text-align:center;}
+.status-live{color:var(--blue-bright);}
+.status-done{color:rgba(200,210,230,.3);}
+.status-wait{color:rgba(200,210,230,.6);}
+.pool-flag{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--silver);margin-right:.3rem;vertical-align:middle;}
+
+.c-neg{color:var(--lime);}.c-pos{color:var(--red);}.c-e{color:var(--cream);}.c-nd{color:rgba(200,210,230,.3);}
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <p>Connecting to Firebase…</p>
+</div>
+
+<div class="wrap" style="display:none" id="app">
+  <header>
+    <div class="eyebrow">Aronimink Golf Club · 2026</div>
+    <h1>PGA <em>Championship</em> Pool</h1>
+    <div class="sub">May 14–17 · All 4 Rounds · Two prizes per round</div>
+    <div class="sync-bar">
+      <span class="sync-dot off" id="syncDot"></span>
+      <span id="syncTxt">Connecting…</span>
+    </div>
+  </header>
+
+  <div class="round-tabs">
+    <button class="rtab active" onclick="showRound(1)">Round 1 <span class="badge">Thu</span></button>
+    <button class="rtab" onclick="showRound(2)">Round 2 <span class="badge">Fri</span></button>
+    <button class="rtab" onclick="showRound(3)">Round 3 <span class="badge">Sat</span></button>
+    <button class="rtab" onclick="showRound(4)">Round 4 <span class="badge">Sun</span></button>
+    <button class="rtab" onclick="showRound('setup')">✏ Edit Picks</button>
+    <button class="rtab" onclick="showRound('live')">⛳ Live Board</button>
+  </div>
+
+  <div id="panel-1" class="round-panel active"></div>
+  <div id="panel-2" class="round-panel"></div>
+  <div id="panel-3" class="round-panel"></div>
+  <div id="panel-4" class="round-panel"></div>
+  <div id="panel-setup" class="round-panel"></div>
+  <div id="panel-live" class="round-panel"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║           GOLF POOL TRACKER — SETUP CHECKLIST                   ║
+// ║  Tell Claude: "Set up pool tracker for [TOURNAMENT NAME] [YEAR] ║
+// ║  Dates: [Thu date] - [Sun date]"  and provide:                  ║
+// ║  1. Tournament name & year                                       ║
+// ║  2. Tournament dates (Thu-Sun)                                   ║
+// ║  3. Course par (usually 70, 71, or 72)                          ║
+// ║  4. Round 1-4 tee times once released (or ask Claude to look up)║
+// ║  5. New Firebase config if using a new Firebase project          ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+// ── Firebase ─────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyARcoNTiWCXQm0ntXsk7eP0r0pNd91ONIQ",
+  authDomain: "masters-pool-34e2e.firebaseapp.com",
+  databaseURL: "https://masters-pool-34e2e-default-rtdb.firebaseio.com",
+  projectId: "masters-pool-34e2e",
+  storageBucket: "masters-pool-34e2e.firebasestorage.app",
+  messagingSenderId: "33551051841",
+  appId: "1:33551051841:web:9cba9ed4f158c53bad2ac0"
+};
+const fbApp = initializeApp(firebaseConfig);
+const db = getDatabase(fbApp);
+
+// ── Constants ────────────────────────────────────────────────────
+const TEAMS = ['HC','JAD','CC','RD','DC','JDS','SC','KS'];
+const SNAKE = ['HC','CC','DC','KS','SC','JAD','JDS','RD','RD','JDS','JAD','SC','KS','DC','CC','HC'];
+const RD_LABELS = {1:'Round 1 · Thu May 14',2:'Round 2 · Fri May 15',3:'Round 3 · Sat May 16',4:'Round 4 · Sun May 17'};
+
+// PGA Championship — ESPN scoreboard API + PGA.com fallback
+const MASTERS_API = 'https://www.pgachampionship.com/api/scores';
+// ESPN scoreboard — direct URL works! (status 200 confirmed)
+const ESPN_URLS = [
+  'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard',
+  'https://api.allorigins.win/raw?url='+encodeURIComponent('https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard'),
+  'https://api.allorigins.win/raw?url='+encodeURIComponent('https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard'),
+];
+
+const MASTERS_FIELD = [
+  "Scottie Scheffler","Rory McIlroy","Cameron Young","Xander Schauffele","Collin Morikawa",
+  "Tommy Fleetwood","Ludvig Åberg","Brooks Koepka","Jon Rahm","Bryson DeChambeau",
+  "Patrick Cantlay","Viktor Hovland","Shane Lowry","Hideki Matsuyama","Sepp Straka",
+  "Justin Thomas","Tony Finau","Akshay Bhatia","Jason Day","Jordan Spieth",
+  "Joaquin Niemann","Adam Scott","Justin Rose","Russell Henley","Harris English",
+  "Keegan Bradley","Wyndham Clark","Tyrrell Hatton","Patrick Reed","Jacob Bridgeman",
+  "Corey Conners","Sungjae Im","Min Woo Lee","Sam Burns","Chris Gotterup",
+  "Tom Kim","Sahith Theegala","Kurt Kitayama","J.J. Spaun","Nick Taylor",
+  "Taylor Pendrith","Max Homa","Ryan Fox","Ben Griffin","Aaron Rai",
+  "Daniel Berger","Jake Knapp","Matt McCarty","Eric Cole","Rasmus Højgaard",
+  "Byeong Hun An","Haotong Li","Harry Hall","Ryan Gerard","Sam Stevens",
+  "Denny McCarthy","Davis Riley","Lucas Glover","Rickie Fowler","Keith Mitchell",
+  "Luke List","Alex Noren","Brendan Steele","Billy Horschel","Adam Hadwin",
+  "Matt Fitzpatrick","Si Woo Kim","Brian Harman","Doug Ghim","Maverick McNealy",
+  "Mackenzie Hughes","Beau Hossler","Mark Hubbard","Troy Merritt","Joel Dahmen",
+  "Scott Stallings","Kevin Streelman","Robert MacIntyre","Thomas Detry","Nicolai Højgaard",
+  "Rasmus Neergaard-Petersen","Tom McKibbin","Aldrich Potgieter","Neal Shipley",
+  "Brandt Snedeker","Sudarshan Yellamaraju","Kristoffer Reitan","Austin Eckroat",
+  "Cameron Davis","Patrick Rodgers","Taylor Moore","Callum Shinkwin","Thriston Lawrence",
+  "Pablo Larrazábal","Jorge Campillo","Grant Forrest","Hurly Long","Matthias Schwab",
+  "Johannes Veerman","Garrick Higgo","Santiago Tarrio","Romain Langasque",
+  "Fred Couples","Vijay Singh","Stewart Cink","Jim Furyk"
+].sort((a,b)=>a.split(' ').pop().localeCompare(b.split(' ').pop()));
+
+// ── Official 2026 PGA Championship Tee Times (CT) ────────────────
+// NOTE: Official tee times released afternoon of Tue May 12
+// Update these before Thursday morning with actual times
+const OFFICIAL_TEE_TIMES = {
+  1: {
+    // Round 1 — Thu May 14 — UPDATE WHEN RELEASED
+    "Scottie Scheffler":"TBD","Rory McIlroy":"TBD","Cameron Young":"TBD",
+  },
+  2: {
+    // Round 2 — Fri May 15 — will update after R1
+  },
+  3: {
+    // Round 3 — Sat May 16 — will update after R2
+  },
+  4: {
+    // Round 4 — Sun May 17 — will update after R3
+  },
+};
+
+// ── State ────────────────────────────────────────────────────────
+function defaultPool(){const p={};for(let r=1;r<=4;r++)p[r]=SNAKE.map((team,i)=>({pick:i+1,team,player:'',keep:false}));return p;}
+let pool = defaultPool();
+let espnData = {};      // { playerName: { score, thru, teeTime, status, roundScore } }
+let lastFetch = null;
+let currentRound = 1;
+let autoRefreshTimer = null;
+
+// ── Sync ─────────────────────────────────────────────────────────
+function setSyncState(state, msg){
+  const dot=document.getElementById('syncDot'),txt=document.getElementById('syncTxt');
+  if(!dot||!txt)return;
+  dot.className='sync-dot '+(state==='ok'?'':state==='syncing'?'syncing':'err');
+  txt.textContent=msg||(state==='ok'?'Live — synced across all users':state==='syncing'?'Saving…':'Sync error');
+}
+async function fbSave(){
+  setSyncState('syncing');
+  try{
+    const d={};for(let r=1;r<=4;r++)d[r]=pool[r].map(p=>({player:p.player||'',keep:p.keep||false}));
+    await set(ref(db,'pool'),d);setSyncState('ok');
+  }catch(e){setSyncState('err','Save failed');}
+}
+function fbListen(){
+  onValue(ref(db,'pool'),(snap)=>{
+    const d=snap.val();if(!d){setSyncState('ok','Connected — no picks yet');return;}
+    for(let r=1;r<=4;r++){if(d[r])d[r].forEach((p,i)=>{if(pool[r][i]){pool[r][i].player=p.player||'';pool[r][i].keep=p.keep||false;}});}
+    for(let r=1;r<=4;r++)renderRound(r);
+    if(currentRound==='setup')renderSetup();
+    renderLiveBoard();
+    setSyncState('ok');
+  },(e)=>setSyncState('err','Lost connection'));
+}
+
+// ── Score Fetch ──────────────────────────────────────────────────
+async function fetchESPN(){
+  document.querySelectorAll('.refresh-btn').forEach(b=>{b.disabled=true;b.textContent='↻ Fetching…';});
+  let parsed=false;
+
+  // Try all URL+proxy combos — direct ESPN scoreboard worked in testing
+  const attempts=[
+    'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard', // direct — worked!
+    'https://api.allorigins.win/raw?url='+encodeURIComponent('https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard'),
+    'https://api.codetabs.com/v1/proxy?quest=https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard',
+    'https://api.allorigins.win/raw?url='+encodeURIComponent('https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard'),
+    'https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard',
+  ];
+
+  for(const url of attempts){
+    if(parsed)break;
+    try{
+      const r=await fetch(url);
+      if(r.ok){
+        const text=await r.text();
+        let j;
+        try{j=JSON.parse(text);}catch(e){continue;}
+        if(j.events&&j.events.length>0){
+          window._lastESPNRaw=j;
+          parseESPN(j);
+          parsed=true;
+          console.log('ESPN OK:',url.substring(0,60));
+        } else if(j.data&&j.data.player){
+          parseMasters(j);
+          parsed=true;
+        }
+      }
+    }catch(e){}
+  }
+
+  if(!parsed) console.warn('All fetch attempts failed');
+  lastFetch=new Date();
+  for(let r=1;r<=4;r++)renderRound(r);
+  renderLiveBoard();
+  updateFetchTime();
+  document.querySelectorAll('.refresh-btn').forEach(b=>{b.disabled=false;b.textContent='↻ Refresh Scores';});
+}
+
+// Parse Masters.com official JSON
+function parseMasters(data){
+  espnData={};
+  try{
+    const players=data.data.player||[];
+    const currentRd=parseInt(data.data.roundNumber)||1;
+    players.forEach(p=>{
+      const name=(p.full_name||p.display_name||'').trim();
+      if(!name)return;
+      // Round scores to par
+      const rdScores={};
+      for(let r=1;r<=4;r++){
+        const rd=p[`round${r}`]||p.rounds?.[r-1];
+        if(rd!==undefined&&rd!==null&&rd!==''){
+          const n=parseInt(rd);if(!isNaN(n))rdScores[r]=n;
+        }
+      }
+      // Thru
+      const thru=p.thru||p.hole||'';
+      // Tee time — PGA stores as "8:04 AM" style
+      const teeTime=p.tee_time||p.teeTime||'';
+      // Status
+      const status=p.status||'';
+      // Current round score to par
+      const curScore=rdScores[currentRd]??null;
+      espnData[name.toLowerCase()]={
+        name,
+        overallScore:curScore,
+        rdScores,
+        thru:thru==='18'&&status==='F'?'F':thru,
+        teeTime,
+        status,
+        position:parseInt(p.pos||p.position||'999')||999
+      };
+    });
+    console.log('PGA.com parsed',Object.keys(espnData).length,'players');
+  }catch(e){console.error('Masters parse error',e);}
+}
+
+// Parse ESPN JSON — extract per-round scores correctly
+function parseESPN(data){
+  espnData={};
+  try{
+    const comps=data?.events?.[0]?.competitions?.[0]?.competitors||[];
+    const currentRd=parseInt(data?.events?.[0]?.competitions?.[0]?.status?.period)||1;
+    const PAR=70; // Aronimink Golf Club
+
+    comps.forEach(c=>{
+      const name=c.athlete?.displayName||'';
+      if(!name)return;
+
+      // ── Per-round scores ─────────────────────────────────────────
+      // ACTUAL ESPN structure confirmed:
+      // c.linescores = array, one entry per ROUND
+      // Each entry: { value: raw_strokes (e.g.67), displayValue: score_to_par (e.g."-5"), period: round_num }
+      // Inner linescores inside each entry = per-hole data (ignore for our purposes)
+      const rdScores={};
+      (c.linescores||[]).forEach(ls=>{
+        const rdNum=parseInt(ls.period)||0;
+        if(rdNum<1||rdNum>4) return;
+        let score=null;
+        // displayValue IS the score to par string: "-5", "E", "+2"
+        const dv=(ls.displayValue||'').trim();
+        if(dv==='E'||dv==='Even') score=0;
+        else if(dv!==''){
+          const n=parseInt(dv);
+          if(!isNaN(n)) score=n;
+        }
+        if(score!==null) rdScores[rdNum]=score;
+      });
+
+      // ── Thru & Tee Time ──────────────────────────────────────────
+      const statusDesc=(c.status?.type?.description||c.status?.type?.name||'').trim();
+
+      // Get thru holes from current round's linescore only
+      const currentLs=(c.linescores||[]).find(ls=>parseInt(ls.period)===currentRd);
+      let thru='';
+      if(currentLs&&rdScores[currentRd]!==undefined){
+        const stats=currentLs.statistics?.categories?.[0]?.stats||[];
+        for(const s of stats){
+          const dv=(s.displayValue||'').trim();
+          const n=parseInt(dv);
+          if(!isNaN(n)&&n>=1&&n<=18&&dv===String(n)){thru=String(n);break;}
+        }
+      }
+      if(thru==='18'||statusDesc.toLowerCase().includes('final')) thru='F';
+
+      // Tee time from official hardcoded schedule
+      const teeTime=OFFICIAL_TEE_TIMES[currentRd]?.[name]||'';
+
+      espnData[name.toLowerCase()]={
+        name,
+        rdScores,
+        thru,
+        teeTime,
+        status:statusDesc,
+        position:c.sortOrder||999
+      };
+    });
+
+    console.log(`ESPN: ${Object.keys(espnData).length} players, round ${currentRd}`);
+    const sample=Object.values(espnData).find(p=>p.thru);
+    if(sample) console.log('Sample:',sample.name,'rdScores:',sample.rdScores,'thru:',sample.thru,'tee:',sample.teeTime);
+  }catch(e){console.error('ESPN parse error',e);}
+}
+
+function updateFetchTime(){
+  document.querySelectorAll('.fetch-time').forEach(el=>{
+    el.textContent=lastFetch?'Updated '+lastFetch.toLocaleTimeString():'';
+  });
+}
+
+// ── Score helpers ────────────────────────────────────────────────
+function findPlayer(name){
+  if(!name||!name.trim())return null;
+  const nl=name.toLowerCase().trim();
+  const key=Object.keys(espnData).find(k=>{
+    return k===nl||nl.split(' ').pop()===k.split(' ').pop();
+  });
+  return key?espnData[key]:null;
+}
+function getRdScore(round,name){
+  const p=findPlayer(name);
+  if(!p)return null;
+  // Return that specific round's score — never cumulative
+  const s=p.rdScores?.[round];
+  if(s!==undefined&&s!==null) return s;
+  return null;
+}
+function fmt(s){if(s===null||s===undefined)return null;return s===0?'E':s>0?'+'+s:''+s;}
+function chipCls(s){if(s===null)return 'chip-nd';return s<0?'chip-neg':s>0?'chip-pos':'chip-even';}
+function totCls(s){if(s===null)return 'c-nd';return s<0?'c-neg':s>0?'c-pos':'c-e';}
+function teamTotal(round,teamId){
+  const vals=pool[round].filter(p=>p.team===teamId&&p.player.trim()).map(p=>getRdScore(round,p.player));
+  if(!vals.length||vals.every(v=>v===null))return null;
+  return vals.reduce((s,v)=>s+(v??0),0);
+}
+function individualWinner(round){
+  let best=null,winners=[];
+  pool[round].forEach(p=>{
+    if(!p.player.trim())return;
+    const s=getRdScore(round,p.player);if(s===null)return;
+    if(best===null||s<best){best=s;winners=[{team:p.team,player:p.player}];}
+    else if(s===best)winners.push({team:p.team,player:p.player});
+  });
+  return winners.length?{score:best,winners}:null;
+}
+function teamWinner(round){
+  let best=null,winners=[];
+  TEAMS.forEach(id=>{
+    const t=teamTotal(round,id);if(t===null)return;
+    if(best===null||t<best){best=t;winners=[id];}
+    else if(t===best)winners.push(id);
+  });
+  return winners.length?{score:best,winners}:null;
+}
+
+// Player meta row (tee time + hole)
+function playerMeta(name){
+  const p=findPlayer(name);
+  if(!p)return '';
+  let parts=[];
+
+  // Tee time — already formatted as "10:30 AM CT" or similar
+  if(p.teeTime&&p.teeTime.trim()){
+    parts.push(`<span class="meta-pill meta-upcoming">⏱ ${p.teeTime}</span>`);
+  }
+
+  // Thru — holes played
+  if(p.thru&&p.thru.toString().trim()){
+    const thruStr=p.thru.toString().trim();
+    const isLive=p.status&&(p.status.toLowerCase().includes('progress')||p.status.toLowerCase().includes('active')||p.status.toLowerCase().includes('playing'));
+    const isFinished=thruStr==='F'||thruStr==='18'||p.status.toLowerCase().includes('final');
+    let cls=isFinished?'meta-complete':isLive?'meta-live':'meta-upcoming';
+    let label=isFinished?'✓ Finished':`🟢 Thru ${thruStr}`;
+    parts.push(`<span class="meta-pill ${cls}">${label}</span>`);
+  }
+
+  return parts.length?`<div class="player-meta">${parts.join('')}</div>`:'';
+}
+
+// ── Render round ─────────────────────────────────────────────────
+function renderRound(round){
+  const indW=individualWinner(round);
+  const teamW=teamWinner(round);
+  const indWinSet=new Set((indW?.winners||[]).map(w=>w.player.toLowerCase().trim()));
+  const standings=TEAMS.map(id=>({id,total:teamTotal(round,id)})).sort((a,b)=>{
+    if(a.total===null&&b.total===null)return 0;
+    if(a.total===null)return 1;if(b.total===null)return -1;
+    return a.total-b.total;
+  });
+  const teamRows=standings.map((t,i)=>{
+    const f=t.total===null?'—':fmt(t.total);
+    const isW=teamW?.winners.includes(t.id)&&t.total!==null;
+    const picks2=pool[round].filter(p=>p.team===t.id&&p.player).map(p=>p.player).join(', ');
+    return `<div class="team-row${isW?' silver-row':''}">
+      <div class="rank-num">${i+1}</div>
+      <div><span class="team-tag">${t.id}</span></div>
+      <div class="team-info"><div class="team-id">${t.id}</div><div class="team-sub">${picks2||'no players set'}</div></div>
+      <div class="team-total ${totCls(t.total)}">${f}</div>
+    </div>`;
+  }).join('');
+
+  const pickRows=pool[round].map(p=>{
+    const s=getRdScore(round,p.player);
+    const isIW=p.player&&indWinSet.has(p.player.toLowerCase().trim());
+    return `<tr>
+      <td class="pnum">${p.pick}</td>
+      <td><span class="team-tag">${p.team}</span></td>
+      <td class="pname${p.player?'':' empty'}">
+        <div>${p.player||'not set'}${isIW?'<span class="win-flag">🏅 low pick</span>':''}</div>
+        ${p.player?playerMeta(p.player):''}
+      </td>
+      <td class="sc-cell"><span class="chip ${chipCls(s)}">${fmt(s)??'—'}</span></td>
+    </tr>`;
+  }).join('');
+
+  const indHTML=indW
+    ?`<div class="winner-name">${indW.winners.map(w=>`${w.team} — ${w.player}`).join('<br>')}</div><div class="winner-detail">Score: ${fmt(indW.score)} · Lowest individual pick${indW.winners.length>1?' (tied)':''}</div>`
+    :`<div class="winner-tbd">Awaiting scores…</div>`;
+  const teamHTML=teamW
+    ?`<div class="winner-name">${teamW.winners.join(' · ')}</div><div class="winner-detail">Team total: ${fmt(teamW.score)} · Lowest combined${teamW.winners.length>1?' (tied)':''}</div>`
+    :`<div class="winner-tbd">Awaiting scores…</div>`;
+
+  document.getElementById(`panel-${round}`).innerHTML=`
+    <div class="status-row">
+      <div class="status-pill"><span class="dot${Object.keys(espnData).length?' live':' off'}"></span><span>${Object.keys(espnData).length?'ESPN Live · '+RD_LABELS[round]:'Click refresh to load scores'}</span></div>
+      <div class="btn-row">
+        <span class="updated fetch-time"></span>
+        <button class="refresh-btn" id="espn-rbtn" onclick="window._fetchESPN()">↻ Refresh Scores</button>
+      </div>
+    </div>
+    <div class="winners-row">
+      <div class="winner-card"><div class="winner-label">🏅 Individual Round Prize — Lowest Single Pick</div>${indHTML}</div>
+      <div class="winner-card"><div class="winner-label">🏆 Team Round Prize — Lowest Combined Total</div>${teamHTML}</div>
+    </div>
+    <div class="sec">Team Standings · ${RD_LABELS[round]}</div>
+    <div class="team-lb">${teamRows}</div>
+    <div class="sec">All Picks · ${RD_LABELS[round]}</div>
+    <div class="picks-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Team</th><th>Player · Tee Time · Hole</th><th class="r">Rd Score</th></tr></thead>
+        <tbody>${pickRows}</tbody>
+      </table>
+    </div>`;
+  updateFetchTime();
+}
+
+// ── Live Leaderboard (full ESPN board) ───────────────────────────
+function renderLiveBoard(){
+  const allPoolPlayers=new Set();
+  for(let r=1;r<=4;r++) pool[r].forEach(p=>{if(p.player)allPoolPlayers.add(p.player.toLowerCase().trim());});
+
+  const sorted=Object.values(espnData).sort((a,b)=>a.position-b.position);
+
+  const rows=sorted.length?sorted.map((p,i)=>{
+    const inPool=allPoolPlayers.has(p.name.toLowerCase());
+    // Use current round score for live board display
+    const currentRd=getCurrentRound();
+    const s=p.rdScores?.[currentRd]??null;
+    const cls=s===null?'c-nd':s<0?'c-neg':s>0?'c-pos':'c-e';
+    const fmtS=fmt(s)??'—';
+    let statusHTML='—';
+    if(p.thru==='F') statusHTML=`<span class="status-done">✓ F</span>`;
+    else if(p.thru) statusHTML=`<span class="status-live">▶ ${p.thru}</span>`;
+    else if(p.teeTime){
+      // teeTime is already formatted as "3:32 PM ET" — display directly
+      statusHTML=`<span class="status-wait">${p.teeTime}</span>`;
+    }
+    return `<div class="espn-row">
+      <div class="espn-pos">${i+1}</div>
+      <div class="espn-name${inPool?' in-pool':''}">${inPool?'<span class="pool-flag"></span>':''}${p.name}</div>
+      <div class="espn-score ${cls}">${fmtS}</div>
+      <div class="espn-hole">${p.thru||'—'}</div>
+      <div class="espn-tee">${statusHTML}</div>
+    </div>`;
+  }).join(''):`<div style="padding:2rem;text-align:center;color:rgba(200,210,230,.3);font-size:.75rem;">No ESPN data yet — click Refresh Scores above</div>`;
+
+  document.getElementById('panel-live').innerHTML=`
+    <div class="status-row">
+      <div class="status-pill"><span class="dot${sorted.length?' live':' off'}"></span><span>${sorted.length?'ESPN Live Leaderboard':'Not yet available'}</span></div>
+      <div class="btn-row">
+        <span class="updated fetch-time"></span>
+        <button class="refresh-btn" id="espn-rbtn" onclick="window._fetchESPN()">↻ Refresh Scores</button>
+      </div>
+    </div>
+    <div class="sec">Full Field Leaderboard · Gold dot = in your pool</div>
+    <div class="espn-board">
+      <div class="espn-row espn-head">
+        <div>Pos</div><div>Player</div><div class="r">Score</div><div style="text-align:center">Thru</div><div style="text-align:center">Status/Tee</div>
+      </div>
+      ${rows}
+    </div>`;
+  updateFetchTime();
+}
+
+// ── Setup ────────────────────────────────────────────────────────
+function renderSetup(){
+  let html='';
+  for(let r=1;r<=4;r++){
+    const rdLabel=['','Round 1 — Thursday','Round 2 — Friday','Round 3 — Saturday','Round 4 — Sunday'][r];
+    const rows=pool[r].map((p,i)=>`
+      <div class="pick-row">
+        <span class="setup-lbl">${p.pick}</span>
+        <span class="setup-tag">${p.team}</span>
+        <div class="ac-wrap" id="ac-r${r}-i${i}"></div>
+        ${r<4?`<label class="keep-wrap"><input type="checkbox" class="keep-cb" ${p.keep?'checked':''} onchange="window._toggleKeep(${r},${i},this.checked)"/>keep</label>`:'<span></span>'}
+        ${r<4?`<button class="copy-btn" onclick="window._copyToNext(${r},${i})">→ Rd${r+1}</button>`:'<span></span>'}
+      </div>`).join('');
+    html+=`<div class="setup-box">
+      <div class="sec">${rdLabel}</div>
+      <div class="setup-note">Search or type a player name. <strong>Keep</strong> = carry to next round. <strong>→ Rd${r<4?r+1:'—'}</strong> = copy this pick now.</div>
+      <div class="setup-grid">${rows}</div>
+    </div>`;
+  }
+  html+=`<div class="action-row">
+    <button class="save-btn" onclick="window._doSave()">💾 Save & Sync to Everyone</button>
+    <button class="sec-btn" onclick="window._applyKeeps()">↻ Apply All Keeps</button>
+  </div>`;
+  document.getElementById('panel-setup').innerHTML=html;
+  for(let r=1;r<=4;r++) pool[r].forEach((p,i)=>buildAC(`ac-r${r}-i${i}`,p.player,(val)=>{pool[r][i].player=val;}));
+}
+
+function buildAC(id,val,onChange){
+  const wrap=document.getElementById(id);if(!wrap)return;
+  wrap.innerHTML=`<input class="pi" type="text" placeholder="Search player…" value="${val||''}" autocomplete="off"/><div class="ac-dropdown"></div>`;
+  const input=wrap.querySelector('input'),drop=wrap.querySelector('.ac-dropdown');
+  function show(q){
+    const ql=q.toLowerCase().trim();
+    const m=ql.length<1?MASTERS_FIELD.slice(0,10):MASTERS_FIELD.filter(p=>p.toLowerCase().includes(ql)).slice(0,10);
+    drop.innerHTML=m.length?m.map(p=>`<div class="ac-item" data-name="${p}">${p}</div>`).join(''):`<div class="ac-item no-match">No match</div>`;
+    drop.querySelectorAll('.ac-item[data-name]').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();input.value=el.dataset.name;onChange(el.dataset.name);drop.classList.remove('open');}));
+    drop.classList.add('open');
+  }
+  input.addEventListener('focus',()=>show(input.value));
+  input.addEventListener('input',()=>{onChange(input.value);show(input.value);});
+  input.addEventListener('blur',()=>setTimeout(()=>drop.classList.remove('open'),150));
+}
+
+// ── Global actions ───────────────────────────────────────────────
+window._fetchESPN = fetchESPN;
+
+window._doSave = async function(){
+  // Apply keeps before saving so carryovers are included
+  for(let r=1;r<=3;r++){
+    pool[r].forEach((p,i)=>{
+      if(p.keep&&p.player.trim()&&!pool[r+1][i].player.trim()){
+        pool[r+1][i].player=p.player;
+      }
+    });
+  }
+  await fbSave();
+  for(let r=1;r<=4;r++)renderRound(r);
+  showRound(1);
+  fetchESPN();
+};
+
+window._toggleKeep = (r,i,v)=>{
+  pool[r][i].keep=v;
+  // Immediately apply/remove the carryover in the next round's input
+  if(r<4){
+    if(v&&pool[r][i].player.trim()){
+      // Copy player to next round if slot is empty
+      if(!pool[r+1][i].player.trim()){
+        pool[r+1][i].player=pool[r][i].player;
+      }
+    }
+  }
+};
+
+window._copyToNext = (r,i)=>{
+  if(r>=4)return;
+  const player=pool[r][i].player;
+  if(!player.trim())return;
+  pool[r+1][i].player=player;
+  renderSetup();
+};
+
+window._applyKeeps = ()=>{
+  for(let r=1;r<=3;r++){
+    pool[r].forEach((p,i)=>{
+      if(p.keep&&p.player.trim()){
+        pool[r+1][i].player=p.player;
+      }
+    });
+  }
+  renderSetup();
+  // Auto-save after applying keeps
+  fbSave();
+};
+
+window.showRound = function(r){
+  document.querySelectorAll('.round-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.rtab').forEach(b=>b.classList.remove('active'));
+  document.getElementById(`panel-${r}`).classList.add('active');
+  const idx=r==='setup'?4:r==='live'?5:r-1;
+  document.querySelectorAll('.rtab')[idx]?.classList.add('active');
+  currentRound=r;
+  if(r==='setup')renderSetup();
+};
+
+// ── Auto-refresh every 3 minutes during tournament ───────────────
+function startAutoRefresh(){
+  if(autoRefreshTimer)clearInterval(autoRefreshTimer);
+  autoRefreshTimer=setInterval(()=>{
+    const now=new Date();
+    const h=now.getHours();
+    // Only auto-refresh between 7am and 9pm ET
+    if(h>=7&&h<=21)fetchESPN();
+  },3*60*1000);
+}
+
+// ── Determine current round from date ────────────────────────────
+function getCurrentRound(){
+  const now=new Date();
+  const et=new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const month=et.getMonth()+1;
+  const day=et.getDate();
+  // 2026 PGA Championship: May 14 (Thu)=R1, May 15 (Fri)=R2, May 16 (Sat)=R3, May 17 (Sun)=R4
+  if(month===5){
+    if(day===14) return 1;
+    if(day===15) return 2;
+    if(day===16) return 3;
+    if(day>=17)  return 4;
+  }
+  return 1;
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+for(let r=1;r<=4;r++)renderRound(r);
+renderLiveBoard();
+document.getElementById('loading-screen').style.display='none';
+document.getElementById('app').style.display='block';
+fbListen();
+// Auto-select current round based on today's date
+showRound(getCurrentRound());
+fetchESPN();
+startAutoRefresh();
+</script>
+</body>
+</html>
