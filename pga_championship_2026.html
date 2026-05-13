@@ -355,16 +355,16 @@ async function fbSave(){
   try{
     const d={};
     for(let r=1;r<=4;r++) d[r]=pool[r].map(p=>({player:p.player||'',keep:p.keep||false}));
-    await set(ref(db,'pool'),d);
-    await set(ref(db,'draftOrder'),draftOrder);
-    await set(ref(db,'draftLocked'),draftLocked);
+    await set(ref(db,'pga2026/pool'),d);
+    await set(ref(db,'pga2026/draftOrder'),draftOrder);
+    await set(ref(db,'pga2026/draftLocked'),draftLocked);
     setSyncState('ok');
   }catch(e){setSyncState('err','Save failed');}
 }
 
 function fbListen(){
   // Listen for pool picks
-  onValue(ref(db,'pool'),(snap)=>{
+  onValue(ref(db,'pga2026/pool'),(snap)=>{
     const d=snap.val();
     if(!d){setSyncState('ok','Connected — no picks yet');return;}
     for(let r=1;r<=4;r++){
@@ -379,7 +379,7 @@ function fbListen(){
   },(e)=>setSyncState('err','Lost connection'));
 
   // Listen for draft order changes
-  onValue(ref(db,'draftOrder'),(snap)=>{
+  onValue(ref(db,'pga2026/draftOrder'),(snap)=>{
     const d=snap.val();
     if(!d) return;
     for(let r=1;r<=4;r++){
@@ -388,7 +388,6 @@ function fbListen(){
     // Rebuild pool pick slots to match new draft order (preserve player names)
     for(let r=1;r<=4;r++){
       const newSlots=buildSnake(draftOrder[r]);
-      // Preserve existing player assignments by pick number
       newSlots.forEach((slot,i)=>{
         if(pool[r][i]){slot.player=pool[r][i].player||'';slot.keep=pool[r][i].keep||false;}
       });
@@ -399,7 +398,7 @@ function fbListen(){
   });
 
   // Listen for draft lock state
-  onValue(ref(db,'draftLocked'),(snap)=>{
+  onValue(ref(db,'pga2026/draftLocked'),(snap)=>{
     const val=snap.val();
     if(val!==null) draftLocked=!!val;
     if(currentRound==='setup') renderSetup();
