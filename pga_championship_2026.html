@@ -392,16 +392,25 @@ function fbListen(){
     for(let r=1;r<=4;r++){
       if(d[r]) draftOrder[r]=d[r];
     }
-    // Rebuild pool pick slots preserving player assignments by TEAM ID
+    // Rebuild preserving player assignments by team + pick position (first or second pick)
     for(let r=1;r<=4;r++){
-      const oldByTeam={};
-      pool[r].forEach(p=>{oldByTeam[p.team]={player:p.player||'',keep:p.keep||false};});
+      // Save old assignments: { 'HC-0': 'Scottie Scheffler', 'HC-1': 'Sam Burns', ... }
+      const oldAssign={};
+      const teamCount={};
+      pool[r].forEach(p=>{
+        const cnt=teamCount[p.team]||0;
+        oldAssign[`${p.team}-${cnt}`]={player:p.player||'',keep:p.keep||false};
+        teamCount[p.team]=(cnt+1);
+      });
+      // Rebuild snake
       pool[r]=buildSnake(draftOrder[r]);
+      // Restore assignments
+      const newTeamCount={};
       pool[r].forEach(slot=>{
-        if(oldByTeam[slot.team]){
-          slot.player=oldByTeam[slot.team].player;
-          slot.keep=oldByTeam[slot.team].keep;
-        }
+        const cnt=newTeamCount[slot.team]||0;
+        const old=oldAssign[`${slot.team}-${cnt}`];
+        if(old){slot.player=old.player;slot.keep=old.keep;}
+        newTeamCount[slot.team]=(cnt+1);
       });
     }
     if(currentRound==='setup') renderSetup();
@@ -778,7 +787,27 @@ function renderLiveBoard(){
   updateFetchTime();
 }
 
-// ── Draft Order Helpers ──────────────────────────────────────────
+// ── Keep helpers ─────────────────────────────────────────────────
+// Each team has 2 picks per round. We need to track WHICH of their
+// 2 picks is being kept (first pick or second pick for that team).
+function getTeamPickIndex(round, slotIndex){
+  // Returns 0 if this is the team's first pick, 1 if second
+  const team=pool[round][slotIndex].team;
+  const firstIdx=pool[round].findIndex(s=>s.team===team);
+  return slotIndex===firstIdx?0:1;
+}
+
+function findNextRoundSlot(currentRound, currentSlotIndex){
+  // Find the corresponding slot in next round for the same team + same pick position
+  const team=pool[currentRound][currentSlotIndex].team;
+  const pickIdx=getTeamPickIndex(currentRound, currentSlotIndex);
+  const nextSlots=pool[currentRound+1].reduce((acc,s,i)=>{
+    if(s.team===team) acc.push(i);
+    return acc;
+  },[]);
+  // pickIdx 0 = first occurrence, 1 = second occurrence
+  return nextSlots[pickIdx]!==undefined ? nextSlots[pickIdx] : nextSlots[0];
+}
 function shuffleDraftOrder(){
   if(draftLocked){alert('Draft order is locked — it can only be shuffled once per tournament.');return;}
   const shuffled=[...TEAMS];
@@ -803,29 +832,36 @@ function lockDraftOrder(){
   alert('Draft order locked and synced to all users! ✅');
 }
 
-// Auto-set Rounds 2-4 draft order based on previous round scores (worst-to-first)
 function autoSetDraftOrder(round){
   if(round<2||round>4) return;
   const prevRound=round-1;
-  const teamTotals=TEAMS.map(id=>{
-    const t=teamTotal(prevRound,id);
-    return {id,total:t};
-  });
-  // Sort worst to first (highest score = worst = picks first)
+  const teamTotals=TEAMS.map(id=>({id,total:teamTotal(prevRound,id)}));
   teamTotals.sort((a,b)=>{
     if(a.total===null&&b.total===null) return 0;
-    if(a.total===null) return 1; // null = didn't score, pick last
+    if(a.total===null) return 1;
     if(b.total===null) return -1;
     return b.total-a.total; // highest score picks first
   });
   draftOrder[round]=teamTotals.map(t=>t.id);
-  // Rebuild pool picks with new order
-  const oldPlayers=pool[round].map(p=>({team:p.team,player:p.player,keep:p.keep}));
+
+  // Save old assignments by team + pick position before rebuilding
+  const oldAssign={};
+  const teamCount={};
+  pool[round].forEach(p=>{
+    const cnt=teamCount[p.team]||0;
+    oldAssign[`${p.team}-${cnt}`]={player:p.player||'',keep:p.keep||false};
+    teamCount[p.team]=(cnt+1);
+  });
+
   pool[round]=buildSnake(draftOrder[round]);
-  // Re-match players to their team slots
+
+  // Restore by team + pick position
+  const newTeamCount={};
   pool[round].forEach(slot=>{
-    const old=oldPlayers.find(o=>o.team===slot.team&&o.player);
-    if(old&&!slot.player){slot.player=old.player||'';slot.keep=old.keep||false;}
+    const cnt=newTeamCount[slot.team]||0;
+    const old=oldAssign[`${slot.team}-${cnt}`];
+    if(old){slot.player=old.player;slot.keep=old.keep;}
+    newTeamCount[slot.team]=(cnt+1);
   });
 }
 
@@ -928,12 +964,14 @@ window._lockDraft = lockDraftOrder;
 window._doSave = async function(){
   // Auto-set R2-4 draft orders based on current scores
   for(let r=2;r<=4;r++) autoSetDraftOrder(r);
-  // Apply keeps by TEAM ID not by index position
+  // Apply keeps using slot-aware matching
   for(let r=1;r<=3;r++){
-    pool[r].forEach(p=>{
+    pool[r].forEach((p,i)=>{
       if(p.keep&&p.player.trim()){
-        const nextSlot=pool[r+1].find(s=>s.team===p.team);
-        if(nextSlot&&!nextSlot.player.trim()) nextSlot.player=p.player;
+        const nextIdx=findNextRoundSlot(r,i);
+        if(nextIdx!==undefined&&!pool[r+1][nextIdx].player.trim()){
+          pool[r+1][nextIdx].player=p.player;
+        }
       }
     });
   }
@@ -945,13 +983,11 @@ window._doSave = async function(){
 
 window._toggleKeep = (r,i,v)=>{
   pool[r][i].keep=v;
-  // Copy by TEAM not by index — draft order changes between rounds
   if(r<4&&pool[r][i].player.trim()){
-    const thisTeam=pool[r][i].team;
-    const nextSlot=pool[r+1].find(s=>s.team===thisTeam);
-    if(nextSlot){
-      if(v) nextSlot.player=pool[r][i].player;
-      else if(nextSlot.player===pool[r][i].player) nextSlot.player='';
+    const nextIdx=findNextRoundSlot(r,i);
+    if(nextIdx!==undefined){
+      if(v) pool[r+1][nextIdx].player=pool[r][i].player;
+      else if(pool[r+1][nextIdx].player===pool[r][i].player) pool[r+1][nextIdx].player='';
     }
   }
 };
@@ -959,21 +995,18 @@ window._toggleKeep = (r,i,v)=>{
 window._copyToNext = (r,i)=>{
   if(r>=4)return;
   const player=pool[r][i].player;
-  const thisTeam=pool[r][i].team;
   if(!player.trim())return;
-  // Find same team in next round by team ID
-  const nextSlot=pool[r+1].find(s=>s.team===thisTeam);
-  if(nextSlot) nextSlot.player=player;
+  const nextIdx=findNextRoundSlot(r,i);
+  if(nextIdx!==undefined) pool[r+1][nextIdx].player=player;
   renderSetup();
 };
 
 window._applyKeeps = ()=>{
   for(let r=1;r<=3;r++){
-    pool[r].forEach(p=>{
+    pool[r].forEach((p,i)=>{
       if(p.keep&&p.player.trim()){
-        // Match by team ID in next round — not by array index
-        const nextSlot=pool[r+1].find(s=>s.team===p.team);
-        if(nextSlot) nextSlot.player=p.player;
+        const nextIdx=findNextRoundSlot(r,i);
+        if(nextIdx!==undefined) pool[r+1][nextIdx].player=p.player;
       }
     });
   }
