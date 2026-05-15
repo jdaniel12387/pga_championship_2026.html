@@ -509,7 +509,8 @@ function renderRound(round){
       <table><thead><tr><th>#</th><th>Team</th><th>Player · Tee Time · Thru</th><th class="r">Rd Score</th></tr></thead>
       <tbody>${pickRows}</tbody></table>
     </div>`;
-  if(lastFetch) document.getElementById(`upd-${round}`)?.textContent='Updated '+lastFetch.toLocaleTimeString();
+  const updEl=document.getElementById(`upd-${round}`);
+  if(lastFetch&&updEl) updEl.textContent='Updated '+lastFetch.toLocaleTimeString();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -632,7 +633,8 @@ function renderLiveBoard(){
       <div class="espn-row espn-head"><div>Pos</div><div>Player</div><div class="r">Score</div><div style="text-align:center">Thru</div><div style="text-align:center">Status</div></div>
       ${rows}
     </div>`;
-  if(lastFetch) document.getElementById('upd-live')?.textContent='Updated '+lastFetch.toLocaleTimeString();
+  const updLive=document.getElementById('upd-live');
+  if(lastFetch&&updLive) updLive.textContent='Updated '+lastFetch.toLocaleTimeString();
 }
 
 // ═══════════════════════════════════════════════════════════════
