@@ -327,97 +327,101 @@ const OFFICIAL_TEE_TIMES = {
 };
 
 // ── State ────────────────────────────────────────────────────────
-// draftOrder[round] = array of 8 team IDs in pick order (worst-to-first for R2-4)
-// draftLocked = true once Round 1 shuffle has been done and saved
-let draftOrder = {1:[...TEAMS],2:[...TEAMS],3:[...TEAMS],4:[...TEAMS]};
-let draftLocked = false; // locks after first shuffle
+// TEAM-CENTRIC data model — picks stored by team, never by array index
+// picks[round][teamId] = {pick1:'',pick2:'',keep1:false,keep2:false}
+// This means draft order changes NEVER corrupt player assignments
 
-function defaultPool(){
+let draftOrder = {1:[...TEAMS],2:[...TEAMS],3:[...TEAMS],4:[...TEAMS]};
+let draftLocked = false;
+
+function defaultPicks(){
   const p={};
-  for(let r=1;r<=4;r++) p[r]=buildSnake(draftOrder[r]);
+  for(let r=1;r<=4;r++){
+    p[r]={};
+    TEAMS.forEach(t=>{ p[r][t]={pick1:'',pick2:'',keep1:false,keep2:false}; });
+  }
   return p;
 }
-let pool = defaultPool();
-let espnData = {};
-let lastFetch = null;
-let currentRound = 1;
-let autoRefreshTimer = null;
+let picks = defaultPicks();
+
+// Build display array from picks + draftOrder (derived, never stored)
+function buildPool(round){
+  const order=draftOrder[round]||[...TEAMS];
+  const snake=[...order,...[...order].reverse()];
+  const teamPickCount={};
+  return snake.map((team,i)=>{
+    const cnt=(teamPickCount[team]||0)+1;
+    teamPickCount[team]=cnt;
+    return {
+      pick:i+1, team,
+      player:picks[round]?.[team]?.[`pick${cnt}`]||'',
+      keep:picks[round]?.[team]?.[`keep${cnt}`]||false,
+      pickNum:cnt
+    };
+  });
+}
+
+// pool is always derived — call rebuildPool() after any picks/draftOrder change
+let pool={1:[],2:[],3:[],4:[]};
+function rebuildPool(){ for(let r=1;r<=4;r++) pool[r]=buildPool(r); }
+rebuildPool();
+
+let espnData={};
+let lastFetch=null;
+let currentRound=1;
+let autoRefreshTimer=null;
 
 // ── Sync ─────────────────────────────────────────────────────────
-function setSyncState(state, msg){
+function setSyncState(state,msg){
   const dot=document.getElementById('syncDot'),txt=document.getElementById('syncTxt');
   if(!dot||!txt)return;
   dot.className='sync-dot '+(state==='ok'?'':state==='syncing'?'syncing':'err');
   txt.textContent=msg||(state==='ok'?'Live — synced across all users':state==='syncing'?'Saving…':'Sync error');
 }
+
 async function fbSave(){
   setSyncState('syncing');
   try{
-    const d={};
-    for(let r=1;r<=4;r++) d[r]=pool[r].map(p=>({player:p.player||'',keep:p.keep||false}));
-    await set(ref(db,'pga2026/pool'),d);
-    await set(ref(db,'pga2026/draftOrder'),draftOrder);
-    await set(ref(db,'pga2026/draftLocked'),draftLocked);
+    // Save team-centric picks — completely independent of draft order
+    await set(ref(db,'pga2026/picks'), picks);
+    await set(ref(db,'pga2026/draftOrder'), draftOrder);
+    await set(ref(db,'pga2026/draftLocked'), draftLocked);
     setSyncState('ok');
-  }catch(e){setSyncState('err','Save failed');}
+  }catch(e){console.error(e);setSyncState('err','Save failed');}
 }
 
 function fbListen(){
-  // Listen for pool picks
-  onValue(ref(db,'pga2026/pool'),(snap)=>{
+  // Picks listener — team-centric, no index confusion possible
+  onValue(ref(db,'pga2026/picks'),(snap)=>{
     const d=snap.val();
     if(!d){setSyncState('ok','Connected — no picks yet');return;}
+    picks=defaultPicks();
     for(let r=1;r<=4;r++){
-      if(d[r]){
-        // d[r] is array of {player, keep} in saved pick order
-        // Match back to pool slots by position (order was saved correctly)
-        d[r].forEach((p,i)=>{
-          if(pool[r][i]){
-            pool[r][i].player=p.player||'';
-            pool[r][i].keep=p.keep||false;
-          }
-        });
-      }
+      if(d[r]) TEAMS.forEach(t=>{
+        if(d[r][t]) picks[r][t]={
+          pick1:d[r][t].pick1||'', pick2:d[r][t].pick2||'',
+          keep1:!!d[r][t].keep1,   keep2:!!d[r][t].keep2
+        };
+      });
     }
+    rebuildPool();
     for(let r=1;r<=4;r++) renderRound(r);
     if(currentRound==='setup') renderSetup();
     renderLiveBoard();
     setSyncState('ok');
   },(e)=>setSyncState('err','Lost connection'));
 
-  // Listen for draft order changes
+  // Draft order listener
   onValue(ref(db,'pga2026/draftOrder'),(snap)=>{
     const d=snap.val();
     if(!d) return;
-    for(let r=1;r<=4;r++){
-      if(d[r]) draftOrder[r]=d[r];
-    }
-    // Rebuild preserving player assignments by team + pick position (first or second pick)
-    for(let r=1;r<=4;r++){
-      // Save old assignments: { 'HC-0': 'Scottie Scheffler', 'HC-1': 'Sam Burns', ... }
-      const oldAssign={};
-      const teamCount={};
-      pool[r].forEach(p=>{
-        const cnt=teamCount[p.team]||0;
-        oldAssign[`${p.team}-${cnt}`]={player:p.player||'',keep:p.keep||false};
-        teamCount[p.team]=(cnt+1);
-      });
-      // Rebuild snake
-      pool[r]=buildSnake(draftOrder[r]);
-      // Restore assignments
-      const newTeamCount={};
-      pool[r].forEach(slot=>{
-        const cnt=newTeamCount[slot.team]||0;
-        const old=oldAssign[`${slot.team}-${cnt}`];
-        if(old){slot.player=old.player;slot.keep=old.keep;}
-        newTeamCount[slot.team]=(cnt+1);
-      });
-    }
+    for(let r=1;r<=4;r++){if(d[r]) draftOrder[r]=d[r];}
+    rebuildPool(); // picks stay the same, just reorder display
     if(currentRound==='setup') renderSetup();
     for(let r=1;r<=4;r++) renderRound(r);
   });
 
-  // Listen for draft lock state
+  // Lock listener
   onValue(ref(db,'pga2026/draftLocked'),(snap)=>{
     const val=snap.val();
     if(val!==null) draftLocked=!!val;
@@ -787,27 +791,6 @@ function renderLiveBoard(){
   updateFetchTime();
 }
 
-// ── Keep helpers ─────────────────────────────────────────────────
-// Each team has 2 picks per round. We need to track WHICH of their
-// 2 picks is being kept (first pick or second pick for that team).
-function getTeamPickIndex(round, slotIndex){
-  // Returns 0 if this is the team's first pick, 1 if second
-  const team=pool[round][slotIndex].team;
-  const firstIdx=pool[round].findIndex(s=>s.team===team);
-  return slotIndex===firstIdx?0:1;
-}
-
-function findNextRoundSlot(currentRound, currentSlotIndex){
-  // Find the corresponding slot in next round for the same team + same pick position
-  const team=pool[currentRound][currentSlotIndex].team;
-  const pickIdx=getTeamPickIndex(currentRound, currentSlotIndex);
-  const nextSlots=pool[currentRound+1].reduce((acc,s,i)=>{
-    if(s.team===team) acc.push(i);
-    return acc;
-  },[]);
-  // pickIdx 0 = first occurrence, 1 = second occurrence
-  return nextSlots[pickIdx]!==undefined ? nextSlots[pickIdx] : nextSlots[0];
-}
 function shuffleDraftOrder(){
   if(draftLocked){alert('Draft order is locked — it can only be shuffled once per tournament.');return;}
   const shuffled=[...TEAMS];
@@ -816,10 +799,7 @@ function shuffleDraftOrder(){
     [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
   }
   draftOrder[1]=shuffled;
-  // Rebuild Round 1 picks with new order (preserve player names if any)
-  const oldPlayers=pool[1].map(p=>p.player);
-  pool[1]=buildSnake(draftOrder[1]);
-  pool[1].forEach((p,i)=>{if(oldPlayers[i])p.player=oldPlayers[i];});
+  rebuildPool();
   renderSetup();
 }
 
@@ -840,29 +820,10 @@ function autoSetDraftOrder(round){
     if(a.total===null&&b.total===null) return 0;
     if(a.total===null) return 1;
     if(b.total===null) return -1;
-    return b.total-a.total; // highest score picks first
+    return b.total-a.total; // highest (worst) score picks first
   });
   draftOrder[round]=teamTotals.map(t=>t.id);
-
-  // Save old assignments by team + pick position before rebuilding
-  const oldAssign={};
-  const teamCount={};
-  pool[round].forEach(p=>{
-    const cnt=teamCount[p.team]||0;
-    oldAssign[`${p.team}-${cnt}`]={player:p.player||'',keep:p.keep||false};
-    teamCount[p.team]=(cnt+1);
-  });
-
-  pool[round]=buildSnake(draftOrder[round]);
-
-  // Restore by team + pick position
-  const newTeamCount={};
-  pool[round].forEach(slot=>{
-    const cnt=newTeamCount[slot.team]||0;
-    const old=oldAssign[`${slot.team}-${cnt}`];
-    if(old){slot.player=old.player;slot.keep=old.keep;}
-    newTeamCount[slot.team]=(cnt+1);
-  });
+  rebuildPool(); // picks data unchanged — just reorders display
 }
 
 // ── Setup ────────────────────────────────────────────────────────
@@ -937,7 +898,17 @@ function renderSetup(){
   </div>`;
 
   document.getElementById('panel-setup').innerHTML=html;
-  for(let r=1;r<=4;r++) pool[r].forEach((p,i)=>buildAC(`ac-r${r}-i${i}`,p.player,(val)=>{pool[r][i].player=val;}));
+  // Mount autocomplete — writes directly to picks[round][team][pickN]
+  for(let r=1;r<=4;r++){
+    pool[r].forEach((p,i)=>{
+      const team=p.team;
+      const pickKey=`pick${p.pickNum}`;
+      buildAC(`ac-r${r}-i${i}`, p.player, (val)=>{
+        picks[r][team][pickKey]=val;
+        rebuildPool();
+      });
+    });
+  }
 }
 
 function buildAC(id,val,onChange){
@@ -962,19 +933,20 @@ window._shuffleDraft = shuffleDraftOrder;
 window._lockDraft = lockDraftOrder;
 
 window._doSave = async function(){
-  // Auto-set R2-4 draft orders based on current scores
+  // Auto-set R2-4 draft orders based on scores
   for(let r=2;r<=4;r++) autoSetDraftOrder(r);
-  // Apply keeps using slot-aware matching
+  // Apply keeps: copy kept players to next round for same team
   for(let r=1;r<=3;r++){
-    pool[r].forEach((p,i)=>{
-      if(p.keep&&p.player.trim()){
-        const nextIdx=findNextRoundSlot(r,i);
-        if(nextIdx!==undefined&&!pool[r+1][nextIdx].player.trim()){
-          pool[r+1][nextIdx].player=p.player;
-        }
+    TEAMS.forEach(t=>{
+      if(picks[r][t].keep1 && picks[r][t].pick1){
+        if(!picks[r+1][t].pick1) picks[r+1][t].pick1=picks[r][t].pick1;
+      }
+      if(picks[r][t].keep2 && picks[r][t].pick2){
+        if(!picks[r+1][t].pick2) picks[r+1][t].pick2=picks[r][t].pick2;
       }
     });
   }
+  rebuildPool();
   await fbSave();
   for(let r=1;r<=4;r++) renderRound(r);
   showRound(getCurrentRound());
@@ -982,34 +954,42 @@ window._doSave = async function(){
 };
 
 window._toggleKeep = (r,i,v)=>{
-  pool[r][i].keep=v;
-  if(r<4&&pool[r][i].player.trim()){
-    const nextIdx=findNextRoundSlot(r,i);
-    if(nextIdx!==undefined){
-      if(v) pool[r+1][nextIdx].player=pool[r][i].player;
-      else if(pool[r+1][nextIdx].player===pool[r][i].player) pool[r+1][nextIdx].player='';
+  const slot=pool[r][i];
+  const keepKey=`keep${slot.pickNum}`;
+  picks[r][slot.team][keepKey]=v;
+  // Immediately copy/remove from next round
+  if(r<4){
+    const pickKey=`pick${slot.pickNum}`;
+    if(v && picks[r][slot.team][pickKey]){
+      picks[r+1][slot.team][pickKey]=picks[r][slot.team][pickKey];
+    } else if(!v){
+      // Only clear if it wasn't manually changed
+      if(picks[r+1][slot.team][pickKey]===picks[r][slot.team][pickKey]){
+        picks[r+1][slot.team][pickKey]='';
+      }
     }
+    rebuildPool();
   }
 };
 
 window._copyToNext = (r,i)=>{
-  if(r>=4)return;
-  const player=pool[r][i].player;
-  if(!player.trim())return;
-  const nextIdx=findNextRoundSlot(r,i);
-  if(nextIdx!==undefined) pool[r+1][nextIdx].player=player;
+  if(r>=4) return;
+  const slot=pool[r][i];
+  const pickKey=`pick${slot.pickNum}`;
+  if(!picks[r][slot.team][pickKey].trim()) return;
+  picks[r+1][slot.team][pickKey]=picks[r][slot.team][pickKey];
+  rebuildPool();
   renderSetup();
 };
 
 window._applyKeeps = ()=>{
   for(let r=1;r<=3;r++){
-    pool[r].forEach((p,i)=>{
-      if(p.keep&&p.player.trim()){
-        const nextIdx=findNextRoundSlot(r,i);
-        if(nextIdx!==undefined) pool[r+1][nextIdx].player=p.player;
-      }
+    TEAMS.forEach(t=>{
+      if(picks[r][t].keep1 && picks[r][t].pick1) picks[r+1][t].pick1=picks[r][t].pick1;
+      if(picks[r][t].keep2 && picks[r][t].pick2) picks[r+1][t].pick2=picks[r][t].pick2;
     });
   }
+  rebuildPool();
   renderSetup();
   fbSave();
 };
